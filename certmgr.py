@@ -51,17 +51,23 @@ def get_pki_path():
 
 
 def get_cert_info(cert_path):
-    cert = crypto.load_certificate(crypto.FILETYPE_PEM, open(cert_path).read())
-    return {
-        'serial': cert.get_serial_number(),
-        'not_before': cert.get_notBefore().decode('utf-8'),
-        'not_after': cert.get_notAfter().decode('utf-8'),
-        'subject': cert.get_subject().CN,
-        'issuer': cert.get_issuer().CN,
-        'fingerprint': cert.digest('sha1').decode('utf-8'),
-        'path': cert_path,
-        'has_expired': cert.has_expired()
-    }
+    try:
+        cert_file = open(cert_path).read()
+        cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_file)
+        return {
+            'serial': cert.get_serial_number(),
+            'not_before': cert.get_notBefore().decode('utf-8'),
+            'not_after': cert.get_notAfter().decode('utf-8'),
+            'subject': cert.get_subject().CN,
+            'issuer': cert.get_issuer().CN,
+            'fingerprint': cert.digest('sha1').decode('utf-8'),
+            'path': cert_path,
+            'has_expired': cert.has_expired()
+        }
+    except FileNotFoundError:
+        raise FileNotFoundError('File not found: {}'.format(cert_path))
+    except IOError:
+        raise IOError('File not readable: {}'.format(cert_path))
 
 
 parser = argparse.ArgumentParser(
@@ -91,15 +97,20 @@ if args.list_issued:
     cert_path = pki_path + '/issued'
     certs = []
     for _cert in os.listdir(cert_path):
-        cert = get_cert_info(cert_path + '/' + _cert)
-        certs.append([
-            cert['issuer'],
-            cert['subject'],
-            datetime.datetime.strptime(cert['not_before'], '%Y%m%d%H%M%SZ'),
-            datetime.datetime.strptime(cert['not_before'], '%Y%m%d%H%M%SZ'),
-            cert['fingerprint'],
-            cert['has_expired'] and 'Expired' or 'Valid',
-        ])
+        try:
+            cert = get_cert_info(cert_path + '/' + _cert)
+            certs.append([
+                cert['issuer'],
+                cert['subject'],
+                datetime.datetime.strptime(
+                    cert['not_before'], '%Y%m%d%H%M%SZ'),
+                datetime.datetime.strptime(
+                    cert['not_before'], '%Y%m%d%H%M%SZ'),
+                cert['fingerprint'],
+                cert['has_expired'] and 'Expired' or 'Valid',
+            ])
+        except Exception as e:
+            eprint(f"Error while parsing certificate:", e)
     print(tabulate(certs, headers=[
           'Issuer', 'Owner', 'Not Before', 'Not After',  'Hash', 'Status']))
     exit(0)
